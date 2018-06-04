@@ -12,19 +12,20 @@ const (
 )
 
 type Cache struct {
-	latestUsage *list.List
-	bucketMask  uint32
-	maxSize     int
-	size        int
-	buckets     []*bucket
-	toRemove    chan *Item
-	toPromote   chan *Item
+	latestUsage  *list.List
+	bucketMask   uint32
+	maxWeight    int
+	weight       int
+	itemSize     int
+	buckets      []*bucket
+	toRemove     chan *Item
+	toPromote    chan *Item
 	evictActions chan *Item
-	config     *Configuration
+	config       *Configuration
 }
 
-type WithSize interface {
-	Size() int
+type WithWeight interface {
+	Weight() int
 }
 
 type Configuration struct {
@@ -45,15 +46,17 @@ func NewConfig() *Configuration {
 	}
 }
 
-func New(maxSize int, config *Configuration) *Cache {
+func New(maxWeight int, config *Configuration) *Cache {
 	c := &Cache{
 		latestUsage: list.New(),
 		bucketMask:  uint32(config.BucketNum - 1),
 		buckets:     make([]*bucket, config.BucketNum),
-		maxSize:     maxSize,
+		maxWeight:   maxWeight,
+		weight:      0,
+		itemSize:    0,
 		toRemove:    make(chan *Item, config.ChannelBuffer),
 		toPromote:   make(chan *Item, config.ChannelBuffer),
-		config: config,
+		config:      config,
 	}
 	if config.OnEvict != nil {
 		c.evictActions = make(chan *Item, config.ChannelBuffer)
@@ -66,6 +69,12 @@ func New(maxSize int, config *Configuration) *Cache {
 	return c
 }
 
+func (c *Cache) Size() int {
+	return c.itemSize
+}
+func (c *Cache) TotalWeight() int {
+	return c.weight
+}
 func (c *Cache) promote(item *Item) {
 	c.toPromote <- item
 }
@@ -88,7 +97,8 @@ func (c *Cache) doPromote(item *Item) bool {
 		}
 		return false
 	}
-	c.size += item.size
+	c.weight += item.weight
+	c.itemSize++
 	item.element = c.latestUsage.PushFront(item)
 	return true
 }
@@ -107,7 +117,8 @@ func (c *Cache) doRemove(item *Item) {
 	if item.element == nil {
 		item.promotions = itemDeleted
 	} else {
-		c.size -= item.size
+		c.weight -= item.weight
+		c.itemSize--
 		c.latestUsage.Remove(item.element)
 		item.promotions = itemDeleted
 	}
@@ -120,7 +131,7 @@ func (c *Cache) ManualGC() {
 }
 func (c *Cache) clean() {
 	elem := c.latestUsage.Back()
-	for c.size > c.maxSize {
+	for c.weight > c.maxWeight {
 		if elem == nil {
 			return
 		}
@@ -128,7 +139,8 @@ func (c *Cache) clean() {
 		item := elem.Value.(*Item)
 
 		c.getBucket(item.Key).remove(item.Key)
-		c.size -= item.size
+		c.weight -= item.weight
+		c.itemSize--
 		c.latestUsage.Remove(elem)
 		item.promotions = itemDeleted
 		if c.config.OnEvict != nil {
@@ -181,7 +193,7 @@ func (c *Cache) asyncLoop() {
 		for {
 			select {
 			case item := <-c.toPromote:
-				if c.doPromote(item) && c.size > c.maxSize { //超过maxSize，触发清理
+				if c.doPromote(item) && c.weight > c.maxWeight { //超过maxSize，触发清理
 					c.clean()
 				}
 
