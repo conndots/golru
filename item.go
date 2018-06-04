@@ -7,11 +7,11 @@ type Item struct {
 	promotions int32
 	weight     int
 	Value      interface{}
-	expireTs   int64
+	ExpireNano int64
 	element    *list.Element
 }
 
-func newItem(key string, value interface{}, expireTs int64) *Item {
+func newItem(key string, value interface{}, expireNano int64) *Item {
 	weight := 1
 	if s, ok := value.(WithWeight); ok {
 		weight = s.Weight()
@@ -21,6 +21,6 @@ func newItem(key string, value interface{}, expireTs int64) *Item {
 		promotions: 0,
 		weight:     weight,
 		Value:      value,
-		expireTs:   expireTs,
+		ExpireNano: expireNano,
 	}
 }

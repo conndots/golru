@@ -150,17 +150,19 @@ func (c *Cache) clean() {
 	}
 }
 
-func (c *Cache) Set(key string, value interface{}) *Item {
+// Set without expiration. if the item is existed, return the previous item; or return nil
+func (c *Cache) Set(key string, value interface{}) (*Item, bool) {
 	return c.SetNX(key, value, noExpire)
 }
 
-func (c *Cache) SetNX(key string, value interface{}, duration time.Duration) *Item {
+// SetNX sets value with expiration. Return the new item, and a bool indicating whether the key is existed.
+func (c *Cache) SetNX(key string, value interface{}, duration time.Duration) (*Item, bool) {
 	item, existedItem := c.getBucket(key).set(key, value, duration)
 	if existedItem != nil {
 		c.remove(existedItem)
 	}
 	c.promote(item)
-	return item
+	return item, existedItem != nil
 }
 
 func (c *Cache) Get(key string) (*Item, bool) {
@@ -170,7 +172,7 @@ func (c *Cache) Get(key string) (*Item, bool) {
 		return nil, false
 	}
 
-	if item.expireTs == noExpire || item.expireTs > c.config.Timer.NowNano() {
+	if item.ExpireNano == noExpire || item.ExpireNano > c.config.Timer.NowNano() {
 		c.promote(item)
 	} else { //已过期
 		d := bucket.remove(item.Key)

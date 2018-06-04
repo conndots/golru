@@ -58,7 +58,7 @@ func (b *bucket) manualGC() {
 	newData := make(map[string]*Item, prevSize)
 	nowStamp := b.timer.NowNano()
 	for key, item := range b.data {
-		if item.expireTs == noExpire || nowStamp > item.expireTs {
+		if item.ExpireNano == noExpire || nowStamp > item.ExpireNano {
 			newData[key] = item
 		}
 	}
