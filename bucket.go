@@ -26,8 +26,11 @@ func (b *bucket) get(key string) (*Item, bool) {
 }
 
 func (b *bucket) set(key string, value interface{}, expire time.Duration) (*Item, *Item) {
-	expireTs := b.timer.NowNano() + expire.Nanoseconds()
-	item := newItem(key, value, expireTs)
+	expireNano := int64(noExpire)
+	if expire != noExpire {
+		expireNano = b.timer.NowNano() + expire.Nanoseconds()
+	}
+	item := newItem(key, value, expireNano)
 	b.RLock()
 	existedItem := b.data[key]
 	b.RUnlock()
